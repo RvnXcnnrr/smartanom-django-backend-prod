@@ -54,6 +54,112 @@ class DHT22DataView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        print("Received data:", request.data)
+        try:    
+            sensor = Sensor.objects.get(
+                smar_tanom__hydroponic__user=request.user,
+                type="DHT22"
+            )
+
+            # Get and validate temperature
+            temperature = request.data.get('temp_value')
+            if temperature is None:
+                print("Temperature missing in request")
+                return Response({
+                    'success': False,
+                    'error': 'Temperature value is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                temperature = float(temperature)
+            except (TypeError, ValueError):
+                print("Invalid temperature value")
+                return Response({
+                    'success': False,
+                    'error': 'Temperature must be a numeric value'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Get and validate humidity
+            humidity = request.data.get('humidity')
+            if humidity is None:
+                return Response({
+                    'success': False,
+                    'error': 'Humidity value is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                humidity = float(humidity)
+            except (TypeError, ValueError):
+                return Response({
+                    'success': False,
+                    'error': 'Humidity must be a numeric value'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Create records with validated data
+            SmarTanomData.objects.create(
+                sensor=sensor,
+                value=temperature,
+                data_type='temperature',
+                created_at=timezone.now()
+            )
+
+            SmarTanomData.objects.create(
+                sensor=sensor,
+                value=humidity,
+                data_type='humidity',
+                created_at=timezone.now()
+            )
+
+            return Response({
+                'success': True,
+                'message': 'DHT22 data saved successfully'
+            }, status=status.HTTP_201_CREATED)
+
+        except Sensor.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'DHT22 sensor not found for this user'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print("Server error:", str(e))
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def get(self, request):
+        try:
+            sensor = Sensor.objects.get(
+                smar_tanom__hydroponic__user=request.user,
+                type="DHT22"
+            )
+
+            # Get the most recent temperature and humidity readings
+            latest_temp = SmarTanomData.objects.filter(
+                sensor=sensor,
+                data_type='temperature'
+            ).order_by('-created_at').first()
+            
+            latest_humidity = SmarTanomData.objects.filter(
+                sensor=sensor,
+                data_type='humidity'
+            ).order_by('-created_at').first()
+
+            return Response({
+                'success': True,
+                'temperature': latest_temp.value if latest_temp else None,
+                'humidity': latest_humidity.value if latest_humidity else None,
+                'timestamp': latest_temp.created_at if latest_temp else None
+            })
+
+        except Sensor.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'DHT22 sensor not found for this user'
+            }, status=status.HTTP_404_NOT_FOUND)
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
         print("Received data:", request.data)  # Add this for debugging
         try:    
             sensor = Sensor.objects.get(
