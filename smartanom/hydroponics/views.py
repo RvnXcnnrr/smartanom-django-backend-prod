@@ -126,7 +126,8 @@ class DHT22DataView(APIView):
                     'success': True,
                     'message': 'Data saved',
                     'temperature': temperature,
-                    'humidity': humidity
+                    'humidity': humidity,
+                    'timestamp': timezone.now().isoformat()
                 }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
@@ -141,6 +142,37 @@ class DHT22DataView(APIView):
                 'error': 'Internal server error',
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def get(self, request):
+        try:
+            sensor = Sensor.objects.get(
+                smar_tanom__hydroponic__user=request.user,
+                type="DHT22"
+            )
+
+            # Get the most recent temperature and humidity readings
+            latest_temp = SmarTanomData.objects.filter(
+                sensor=sensor,
+                data_type='temperature'
+            ).order_by('-created_at').first()
+            
+            latest_humidity = SmarTanomData.objects.filter(
+                sensor=sensor,
+                data_type='humidity'
+            ).order_by('-created_at').first()
+
+            return Response({
+                'success': True,
+                'temperature': latest_temp.value if latest_temp else None,
+                'humidity': latest_humidity.value if latest_humidity else None,
+                'timestamp': latest_temp.created_at if latest_temp else None
+            })
+
+        except Sensor.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'DHT22 sensor not found for this user'
+            }, status=status.HTTP_404_NOT_FOUND)
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
