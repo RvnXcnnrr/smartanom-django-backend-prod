@@ -54,6 +54,7 @@ class DHT22DataView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        print("Received data:", request.data)  # Add this for debugging
         try:    
             sensor = Sensor.objects.get(
                 smar_tanom__hydroponic__user=request.user,
@@ -61,8 +62,9 @@ class DHT22DataView(APIView):
             )
 
             # Get and validate temperature
-            temperature = request.data.get('temperature')
+            temperature = request.data.get('temp_value')  # Changed from 'temperature'
             if temperature is None:
+                print("Temperature missing in request")
                 return Response({
                     'success': False,
                     'error': 'Temperature value is required'
@@ -71,6 +73,7 @@ class DHT22DataView(APIView):
             try:
                 temperature = float(temperature)
             except (TypeError, ValueError):
+                print("Invalid temperature value")
                 return Response({
                     'success': False,
                     'error': 'Temperature must be a numeric value'
