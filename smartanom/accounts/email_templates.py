@@ -4,7 +4,8 @@ from django.conf import settings
 
 def get_activation_email(user, request, token):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
-    activation_url = f"https://smartanom-django-backend-prod.onrender.com/api/accounts/activate/{uid}/{token}/"
+    # Use your actual domain or backend URL here
+    activation_url = f"http://127.0.0.1:8000/api/accounts/activate/{uid}/{token}/"
     
     subject = "Activate your SmarTanom Account"
     message = f"""

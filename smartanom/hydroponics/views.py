@@ -8,8 +8,6 @@ from rest_framework.decorators import api_view, permission_classes
 
 from .models import Hydroponic, SmarTanom, Sensor, SmarTanomData
 from .serializers import HydroponicSystemSerializer
-import traceback
-from django.db import transaction
 
 
 @api_view(['POST'])
@@ -55,93 +53,77 @@ class CreateHydroponicSystemView(generics.CreateAPIView):
 class DHT22DataView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        print("\n===== NEW REQUEST =====")
-        print(f"User: {request.user} (ID: {request.user.id})")
-        print(f"Request data: {request.data}")
+    def post(self, request, *args, **kwargs):
+        # Get the data from the request
+        temp_value = request.data.get('temp_value')
+        humidity_value = request.data.get('humidity_value')
+        
+        # Validate that we have values
+        if temp_value is None or humidity_value is None:
+            return Response(
+                {"error": "Missing temperature or humidity values"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         try:
-            with transaction.atomic():
-                # 1. Verify sensor exists
-                try:
-                    sensor = Sensor.objects.select_related(
-                        'smar_tanom__hydroponic'
-                    ).get(
-                        smar_tanom__hydroponic__user=request.user,
-                        type="DHT22"
-                    )
-                    print(f"Found sensor ID: {sensor.id}")
-                except Sensor.DoesNotExist:
-                    print("ERROR: No DHT22 sensor configured for user")
-                    return Response({
-                        'success': False,
-                        'error': 'Please configure a DHT22 sensor first'
-                    }, status=status.HTTP_404_NOT_FOUND)
-
-                # 2. Validate data
-                errors = {}
-                temperature = request.data.get('temp_value')
-                humidity = request.data.get('humidity')
-
-                if temperature is None:
-                    errors['temp_value'] = 'This field is required'
-                else:
-                    try:
-                        temperature = float(temperature)
-                    except (TypeError, ValueError):
-                        errors['temp_value'] = 'Must be a valid number'
-
-                if humidity is None:
-                    errors['humidity'] = 'This field is required'
-                else:
-                    try:
-                        humidity = float(humidity)
-                    except (TypeError, ValueError):
-                        errors['humidity'] = 'Must be a valid number'
-
-                if errors:
-                    print(f"Validation errors: {errors}")
-                    return Response({
-                        'success': False,
-                        'errors': errors
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                # 3. Save data
-                print(f"Saving data - Temp: {temperature}, Humidity: {humidity}")
-                SmarTanomData.objects.create(
-                    sensor=sensor,
-                    value=temperature,
-                    data_type='temperature',
-                    created_at=timezone.now()
+            # Convert to float and validate ranges
+            temp_value = float(temp_value)
+            humidity_value = float(humidity_value)
+            
+            # Validate reasonable ranges
+            if not (-20 <= temp_value <= 50):
+                return Response(
+                    {"error": f"Temperature value {temp_value} outside reasonable range (-20 to 50°C)"},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-                SmarTanomData.objects.create(
-                    sensor=sensor,
-                    value=humidity,
-                    data_type='humidity',
-                    created_at=timezone.now()
+                
+            if not (0 <= humidity_value <= 100):
+                return Response(
+                    {"error": f"Humidity value {humidity_value} outside reasonable range (0 to 100%)"},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-
-                print("Data saved successfully")
-                return Response({
-                    'success': True,
-                    'message': 'Data saved',
-                    'temperature': temperature,
-                    'humidity': humidity,
-                    'timestamp': timezone.now().isoformat()
-                }, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            print("\n!!! SERVER ERROR !!!")
-            print(f"Error type: {type(e).__name__}")
-            print(f"Error message: {str(e)}")
-            print("Traceback:")
-            print(traceback.format_exc())
             
-            return Response({
-                'success': False,
-                'error': 'Internal server error',
-                'details': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Get the sensor (assuming ID 1 is for DHT22)
+            sensor = Sensor.objects.get(
+                smar_tanom__hydroponic__user=request.user,
+                type="DHT22"
+            )
+            
+            # Create temperature record
+            SmarTanomData.objects.create(
+                sensor=sensor,
+                data_type="temperature",
+                value=temp_value,
+                created_at=timezone.now()
+            )
+            
+            # Create humidity record
+            SmarTanomData.objects.create(
+                sensor=sensor,
+                data_type="humidity",
+                value=humidity_value,
+                created_at=timezone.now()
+            )
+            
+            return Response(
+                {"success": True, "message": "DHT22 data saved successfully"},
+                status=status.HTTP_201_CREATED
+            )
+        except ValueError:
+            return Response(
+                {"error": "Temperature and humidity must be numeric values"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Sensor.DoesNotExist:
+            return Response(
+                {"error": "DHT22 sensor not found for this user"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def get(self, request):
         try:
@@ -161,452 +143,14 @@ class DHT22DataView(APIView):
                 data_type='humidity'
             ).order_by('-created_at').first()
 
-            return Response({
-                'success': True,
-                'temperature': latest_temp.value if latest_temp else None,
-                'humidity': latest_humidity.value if latest_humidity else None,
-                'timestamp': latest_temp.created_at if latest_temp else None
-            })
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        print("Received data:", request.data)  # Debug logging
-        try:    
-            # Get the sensor for the current user
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            # Get and validate temperature
-            temperature = request.data.get('temp_value')
-            if temperature is None:
-                print("Temperature missing in request")
-                return Response({
-                    'success': False,
-                    'error': 'Temperature value is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                temperature = float(temperature)
-            except (TypeError, ValueError):
-                print("Invalid temperature value")
-                return Response({
-                    'success': False,
-                    'error': 'Temperature must be a numeric value'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Get and validate humidity
-            humidity = request.data.get('humidity')
-            if humidity is None:
-                return Response({
-                    'success': False,
-                    'error': 'Humidity value is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                humidity = float(humidity)
-            except (TypeError, ValueError):
-                return Response({
-                    'success': False,
-                    'error': 'Humidity must be a numeric value'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Create records with validated data
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=temperature,
-                data_type='temperature',
-                created_at=timezone.now()
-            )
-
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=humidity,
-                data_type='humidity',
-                created_at=timezone.now()
-            )
+            # Format values to 1 decimal place for consistency
+            temp_value = round(latest_temp.value, 1) if latest_temp else None
+            humidity_value = round(latest_humidity.value, 1) if latest_humidity else None
 
             return Response({
                 'success': True,
-                'message': 'DHT22 data saved successfully'
-            }, status=status.HTTP_201_CREATED)
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            print("Server error:", str(e))  # Detailed error logging
-            return Response({
-                'success': False,
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def get(self, request):
-        try:
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            # Get the most recent temperature and humidity readings
-            latest_temp = SmarTanomData.objects.filter(
-                sensor=sensor,
-                data_type='temperature'
-            ).order_by('-created_at').first()
-            
-            latest_humidity = SmarTanomData.objects.filter(
-                sensor=sensor,
-                data_type='humidity'
-            ).order_by('-created_at').first()
-
-            return Response({
-                'success': True,
-                'temperature': latest_temp.value if latest_temp else None,
-                'humidity': latest_humidity.value if latest_humidity else None,
-                'timestamp': latest_temp.created_at if latest_temp else None
-            })
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        print("Received data:", request.data)
-        try:    
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            # Get and validate temperature
-            temperature = request.data.get('temp_value')
-            if temperature is None:
-                print("Temperature missing in request")
-                return Response({
-                    'success': False,
-                    'error': 'Temperature value is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                temperature = float(temperature)
-            except (TypeError, ValueError):
-                print("Invalid temperature value")
-                return Response({
-                    'success': False,
-                    'error': 'Temperature must be a numeric value'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Get and validate humidity
-            humidity = request.data.get('humidity')
-            if humidity is None:
-                return Response({
-                    'success': False,
-                    'error': 'Humidity value is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                humidity = float(humidity)
-            except (TypeError, ValueError):
-                return Response({
-                    'success': False,
-                    'error': 'Humidity must be a numeric value'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Create records with validated data
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=temperature,
-                data_type='temperature',
-                created_at=timezone.now()
-            )
-
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=humidity,
-                data_type='humidity',
-                created_at=timezone.now()
-            )
-
-            return Response({
-                'success': True,
-                'message': 'DHT22 data saved successfully'
-            }, status=status.HTTP_201_CREATED)
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            print("Server error:", str(e))
-            return Response({
-                'success': False,
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def get(self, request):
-        try:
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            # Get the most recent temperature and humidity readings
-            latest_temp = SmarTanomData.objects.filter(
-                sensor=sensor,
-                data_type='temperature'
-            ).order_by('-created_at').first()
-            
-            latest_humidity = SmarTanomData.objects.filter(
-                sensor=sensor,
-                data_type='humidity'
-            ).order_by('-created_at').first()
-
-            return Response({
-                'success': True,
-                'temperature': latest_temp.value if latest_temp else None,
-                'humidity': latest_humidity.value if latest_humidity else None,
-                'timestamp': latest_temp.created_at if latest_temp else None
-            })
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        print("Received data:", request.data)  # Add this for debugging
-        try:    
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            # Get and validate temperature
-            temperature = request.data.get('temp_value')  # Changed from 'temperature'
-            if temperature is None:
-                print("Temperature missing in request")
-                return Response({
-                    'success': False,
-                    'error': 'Temperature value is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                temperature = float(temperature)
-            except (TypeError, ValueError):
-                print("Invalid temperature value")
-                return Response({
-                    'success': False,
-                    'error': 'Temperature must be a numeric value'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Get and validate humidity
-            humidity = request.data.get('humidity')
-            if humidity is None:
-                return Response({
-                    'success': False,
-                    'error': 'Humidity value is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                humidity = float(humidity)
-            except (TypeError, ValueError):
-                return Response({
-                    'success': False,
-                    'error': 'Humidity must be a numeric value'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Create records with validated data
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=temperature,
-                data_type='temperature',
-                created_at=timezone.now()
-            )
-
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=humidity,
-                data_type='humidity',
-                created_at=timezone.now()
-            )
-
-            return Response({
-                'success': True,
-                'message': 'DHT22 data saved successfully'
-            }, status=status.HTTP_201_CREATED)
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({
-                'success': False,
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def get(self, request):
-        try:
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            # Get the most recent temperature and humidity readings
-            latest_temp = SmarTanomData.objects.filter(
-                sensor=sensor,
-                data_type='temperature'
-            ).order_by('-created_at').first()
-            
-            latest_humidity = SmarTanomData.objects.filter(
-                sensor=sensor,
-                data_type='humidity'
-            ).order_by('-created_at').first()
-
-            return Response({
-                'success': True,
-                'temperature': latest_temp.value if latest_temp else None,
-                'humidity': latest_humidity.value if latest_humidity else None,
-                'timestamp': latest_temp.created_at if latest_temp else None
-            })
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:    
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            temperature = request.data.get('temperature')
-            humidity = request.data.get('humidity')
-
-            # Validate that values are present and can be converted to float
-            if temperature is None:
-                return Response({
-                    'success': False,
-                    'error': 'Temperature value is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            if humidity is None:
-                return Response({
-                    'success': False,
-                    'error': 'Humidity value is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            try:
-                temperature = float(temperature)
-                humidity = float(humidity)
-            except (TypeError, ValueError):
-                return Response({
-                    'success': False,
-                    'error': 'Temperature and humidity must be numeric values'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Create separate records for temperature and humidity
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=temperature,
-                data_type='temperature',
-                created_at=timezone.now()
-            )
-
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=humidity,
-                data_type='humidity',
-                created_at=timezone.now()
-            )
-
-            return Response({
-                'success': True,
-                'message': 'DHT22 data saved successfully'
-            })
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:    
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            # Create separate records for temperature and humidity
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=request.data.get('temperature'),
-                data_type='temperature',  # Add this field to distinguish
-                created_at=timezone.now()
-            )
-
-            SmarTanomData.objects.create(
-                sensor=sensor,
-                value=request.data.get('humidity'),
-                data_type='humidity',  # Add this field to distinguish
-                created_at=timezone.now()
-            )
-
-            return Response({
-                'success': True,
-                'message': 'DHT22 data saved successfully'
-            })
-
-        except Sensor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'DHT22 sensor not found for this user'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-    def get(self, request):
-        try:
-            sensor = Sensor.objects.get(
-                smar_tanom__hydroponic__user=request.user,
-                type="DHT22"
-            )
-
-            # Get the most recent temperature and humidity readings separately
-            latest_temp = SmarTanomData.objects.filter(
-                sensor=sensor,
-                data_type='temperature'
-            ).order_by('-created_at').first()
-            
-            latest_humidity = SmarTanomData.objects.filter(
-                sensor=sensor,
-                data_type='humidity'
-            ).order_by('-created_at').first()
-
-            return Response({
-                'success': True,
-                'temperature': latest_temp.value if latest_temp else None,
-                'humidity': latest_humidity.value if latest_humidity else None,
+                'temperature': temp_value,
+                'humidity': humidity_value,
                 'timestamp': latest_temp.created_at if latest_temp else None
             })
 
