@@ -62,12 +62,15 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8081",
     "http://127.0.0.1:8081",
     "http://10.0.2.2:8081",  # Android emulator special IP for localhost
+    "http://10.0.2.16:8081", # Your Android emulator IP
     "http://10.0.2.2:19006",  # Android emulator for Expo
+    "http://10.0.2.16:19006", # Your Android emulator IP for Expo
     "http://localhost:19006",
     "http://127.0.0.1:19006",
     "https://smartanom-django-backend-prod.onrender.com",
     "https://smartanom-backend.onrender.com",
     "exp://10.0.2.2:8081",    # Expo on Android emulator
+    "exp://10.0.2.16:8081",   # Expo on your Android emulator
     "exp://localhost:8081",   # Expo on web
     "exp://127.0.0.1:8081"    # Expo alternative
 ]
