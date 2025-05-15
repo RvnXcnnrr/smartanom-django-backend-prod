@@ -58,6 +58,7 @@ MIDDLEWARE = [
 
 # CORS settings for production
 CORS_ALLOWED_ORIGINS = [
+    "*",
     "https://smartanom-frontend.onrender.com",
     "http://localhost:8081",
     "http://127.0.0.1:8081",
@@ -127,6 +128,7 @@ if DEBUG:
 else:
     CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
+    "*",
     "http://localhost:8081",
     "http://127.0.0.1:8081",
     "http://10.0.2.2:8081",
