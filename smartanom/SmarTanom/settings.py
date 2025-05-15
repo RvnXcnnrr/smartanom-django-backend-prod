@@ -58,14 +58,18 @@ MIDDLEWARE = [
 
 # CORS settings for production
 CORS_ALLOWED_ORIGINS = [
-    "https://smartanom-frontend.onrender.com",  # Your production frontend
+    "https://smartanom-frontend.onrender.com",
     "http://localhost:8081",
     "http://127.0.0.1:8081",
-    "http://10.0.2.2:8081",
-    "http://localhost:19006",  # For React Native development
-    "http://127.0.0.1:19006",  # For React Native development
-    "https://smartanom-django-backend-prod.onrender.com",  # Your backend domain
-    "https://smartanom-backend.onrender.com"  # Your other backend domain
+    "http://10.0.2.2:8081",  # Android emulator special IP for localhost
+    "http://10.0.2.2:19006",  # Android emulator for Expo
+    "http://localhost:19006",
+    "http://127.0.0.1:19006",
+    "https://smartanom-django-backend-prod.onrender.com",
+    "https://smartanom-backend.onrender.com",
+    "exp://10.0.2.2:8081",    # Expo on Android emulator
+    "exp://localhost:8081",   # Expo on web
+    "exp://127.0.0.1:8081"    # Expo alternative
 ]
 
 # Security settings for production
