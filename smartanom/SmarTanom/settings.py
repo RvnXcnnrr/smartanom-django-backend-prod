@@ -64,6 +64,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://10.0.2.2:8081",
     "http://localhost:19006",  # For React Native development
     "http://127.0.0.1:19006",  # For React Native development
+    "https://smartanom-django-backend-prod.onrender.com",  # Your backend domain
+    "https://smartanom-backend.onrender.com"  # Your other backend domain
 ]
 
 # Security settings for production
@@ -99,7 +101,7 @@ REST_FRAMEWORK = {
 APPEND_SLASH = False
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # MUST be at the top
+    'corsheaders.middleware.CorsMiddleware',  # This must come first
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
