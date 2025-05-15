@@ -58,9 +58,12 @@ MIDDLEWARE = [
 
 # CORS settings for production
 CORS_ALLOWED_ORIGINS = [
-    "https://smartanom-frontend.onrender.com",
+    "https://smartanom-frontend.onrender.com",  # Your production frontend
     "http://localhost:8081",
     "http://127.0.0.1:8081",
+    "http://10.0.2.2:8081",
+    "http://localhost:19006",  # For React Native development
+    "http://127.0.0.1:19006",  # For React Native development
 ]
 
 # Security settings for production
@@ -96,7 +99,7 @@ REST_FRAMEWORK = {
 APPEND_SLASH = False
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # <-- MUST come first
+    'corsheaders.middleware.CorsMiddleware',  # MUST be at the top
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -107,15 +110,20 @@ MIDDLEWARE = [
 ]
 
 
-# CORS settings (ensure these are correct)\
+# CORS settings (ensure these are correct)
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
+# Only enable this for development
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8081",
     "http://127.0.0.1:8081",
     "http://10.0.2.2:8081",
     "http://localhost:19006",  # For React Native development
     "http://127.0.0.1:19006",  # For React Native development
+    # Add your frontend's production URL if needed
 ]
 
 CORS_ALLOW_METHODS = [
@@ -138,6 +146,12 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# For React Native, you might need to allow all headers
+CORS_ALLOW_ALL_HEADERS = True
+
+# You might also need to expose additional headers
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken', 'Authorization']
 
 ROOT_URLCONF = 'SmarTanom.urls'
 
